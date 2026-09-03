@@ -1,67 +1,78 @@
 import time
-from collections import deque, Counter
-from pathlib import Path
+from collections import deque
+from datetime import datetime
 
 import streamlit as st
 import cv2
-import dlib
 import numpy as np
 import joblib
 import pandas as pd
 
-# Raiz do projeto (…/paginas/classificar.py -> …/)
-RAIZ = Path(__file__).resolve().parent.parent
-CAMINHO_PREDICTOR = RAIZ / "shape_predictor_68_face_landmarks.dat"
+from features import RAIZ, criar_detector_predictor, extrair_features, eye_aspect_ratio
+
 CAMINHO_MODELO = RAIZ / "model_Random_Forest.pkl"
 
 # --- Parâmetros da janela temporal ---
 FPS_ALVO = 2                 # frames processados por segundo
 JANELA_SEG = 20              # duração da janela deslizante (segundos)
 JANELA_MAX = FPS_ALVO * JANELA_SEG
-MIN_AMOSTRAS = 5             # mínimo de amostras válidas antes de exibir resultado
+MIN_AMOSTRAS = 5             # mínimo de amostras antes de exibir um resultado
 LARGURA_MIN_ROSTO = 100      # rostos menores que isso são ignorados (baixa qualidade)
-ALPHA_EMA = 0.1             # suavização exponencial do score contínuo
-CONFIRMACOES_TROCA = 3      # amostras seguidas numa nova classe para trocar o rótulo
+ALPHA_EMA = 0.15             # suavização exponencial (0 = lento, 1 = sem suavizar)
+
+# --- Verificação de olhos fechados ---
+EAR_LIMIAR = 0.15            # abaixo disso o olho é considerado fechado
+EAR_AMOSTRAS = 4            # amostras seguidas de olho fechado para valer (~2 s)
+
+# Limiar de decisão: engajado se P(engajado) >= isto
+LIMIAR_ENGAJADO = 0.5
 
 
 @st.cache_resource
 def carregar_recursos():
-    detector = dlib.get_frontal_face_detector()
-    predictor = dlib.shape_predictor(str(CAMINHO_PREDICTOR))
+    detector, predictor = criar_detector_predictor()
     modelo = joblib.load(CAMINHO_MODELO)
     return detector, predictor, modelo
 
 
-def extrair_features(frame, detector, predictor):
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    faces = detector(gray)
-    if len(faces) == 0:
-        return None, None
-    face = faces[0]
-    shape = predictor(gray, face)
-    coords = np.array([[p.x, p.y] for p in shape.parts()], dtype=float)
-    coords /= face.width()
-    return coords.flatten(), face
+def prob_engajado(proba_por_classe):
+    """Junta os 4 níveis em 2: engajado = níveis 2 e 3."""
+    return float(proba_por_classe[2] + proba_por_classe[3])
+
+
+def montar_relatorio(historico):
+    """Recebe a lista de amostras da sessão e devolve (DataFrame, resumo dict)."""
+    df = pd.DataFrame(historico)
+    if df.empty:
+        return df, {}
+    duracao = df["segundos"].iloc[-1] - df["segundos"].iloc[0]
+    resumo = {
+        "Início": df["horario"].iloc[0],
+        "Fim": df["horario"].iloc[-1],
+        "Duração (s)": round(duracao, 1),
+        "Amostras": len(df),
+        "% do tempo engajado": f"{(df['engajado'].mean() * 100):.0f}%",
+        "P(engajado) média": f"{df['prob_engajado'].mean():.2f}",
+        "P(engajado) mínima": f"{df['prob_engajado'].min():.2f}",
+        "P(engajado) máxima": f"{df['prob_engajado'].max():.2f}",
+    }
+    return df, resumo
 
 
 def exibir():
     st.header("Classificação em Tempo Real")
     st.write(
-        "O engajamento é um estado comportamental sustentado, não um instante. "
-        f"Por isso a classificação é feita a partir de uma janela deslizante de "
-        f"{JANELA_SEG} segundos: cada frame contribui com uma probabilidade e o "
-        "resultado exibido é a média suavizada dessa janela."
+        "O engajamento é um estado que se sustenta no tempo, não um instante. "
+        f"Por isso a decisão vem de uma janela de {JANELA_SEG} segundos: cada frame "
+        "contribui com uma probabilidade e o que aparece na tela é a média suavizada "
+        "dessa janela. Ao final, é possível salvar o relatório da sessão."
     )
 
-    rotulos = {
-        0: ("Muito Baixo", "🔴"),
-        1: ("Baixo", "🟠"),
-        2: ("Alto", "🟢"),
-        3: ("Muito Alto", "🔵"),
-    }
-
     detector, predictor, modelo = carregar_recursos()
-    classes_modelo = list(modelo.classes_)
+    classes_modelo = [int(c) for c in modelo.classes_]
+
+    # Histórico da sessão persiste entre os reruns do Streamlit
+    st.session_state.setdefault("historico", [])
 
     iniciar = st.checkbox("Ativar webcam")
 
@@ -70,99 +81,140 @@ def exibir():
         frame_placeholder = st.empty()
     with col2:
         resultado_placeholder = st.empty()
-        confianca_placeholder = st.empty()
+        barra_placeholder = st.empty()
         status_placeholder = st.empty()
     grafico_placeholder = st.empty()
 
-    if not iniciar:
-        return
+    if iniciar:
+        # Nova captura: zera o histórico ao (re)ativar a webcam
+        if not st.session_state.get("_capturando", False):
+            st.session_state["historico"] = []
+            st.session_state["_capturando"] = True
 
-    # Estado da janela temporal
-    janela_proba = deque(maxlen=JANELA_MAX)   # probabilidades [p0..p3] por amostra
-    historico_score = deque(maxlen=JANELA_MAX)  # score contínuo suavizado ao longo do tempo
-    ema_score = None
-    rotulo_atual = None
-    contador_troca = 0
+        janela_proba = deque(maxlen=JANELA_MAX)
+        historico_score = deque(maxlen=JANELA_MAX)
+        ema_prob = None
+        ear_baixo_seguidas = 0
+        t_inicio = time.time()
 
-    cap = cv2.VideoCapture(0)
-    try:
-        while iniciar:
-            inicio = time.time()
-            ret, frame = cap.read()
-            if not ret:
-                st.error("Não foi possível acessar a webcam.")
-                break
+        cap = cv2.VideoCapture(0)
+        try:
+            while iniciar:
+                inicio = time.time()
+                ret, frame = cap.read()
+                if not ret:
+                    st.error("Não foi possível acessar a webcam.")
+                    break
 
-            features, face = extrair_features(frame, detector, predictor)
-            rosto_valido = features is not None and face.width() >= LARGURA_MIN_ROSTO
+                features, face = extrair_features(frame, detector, predictor)
+                rosto_valido = features is not None and face.width() >= LARGURA_MIN_ROSTO
 
-            if rosto_valido:
-                proba_raw = modelo.predict_proba([features])[0]
-                # Reordena para o índice de classe 0..3 independentemente da ordem interna
-                proba = np.zeros(4)
-                for i, c in enumerate(classes_modelo):
-                    proba[int(c)] = proba_raw[i]
-                janela_proba.append(proba)
+                olhos_fechados = False
+                if rosto_valido:
+                    ear = eye_aspect_ratio(frame, detector, predictor)
+                    if ear is not None and ear < EAR_LIMIAR:
+                        ear_baixo_seguidas += 1
+                    else:
+                        ear_baixo_seguidas = 0
+                    olhos_fechados = ear_baixo_seguidas >= EAR_AMOSTRAS
 
-                x, y, w, h = face.left(), face.top(), face.width(), face.height()
-                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                    proba_raw = modelo.predict_proba([features])[0]
+                    proba = np.zeros(4)
+                    for i, c in enumerate(classes_modelo):
+                        proba[c] = proba_raw[i]
+                    janela_proba.append(proba)
 
-            # Agrega a janela
-            if len(janela_proba) >= MIN_AMOSTRAS:
-                media = np.mean(janela_proba, axis=0)
-                classe_janela = int(np.argmax(media))
-                score = float(np.dot(media, [0, 1, 2, 3]))
-                ema_score = score if ema_score is None else \
-                    ALPHA_EMA * score + (1 - ALPHA_EMA) * ema_score
-                historico_score.append(ema_score)
-
-                # Histerese: só troca o rótulo após N amostras seguidas na nova classe
-                if rotulo_atual is None:
-                    rotulo_atual = classe_janela
-                elif classe_janela != rotulo_atual:
-                    contador_troca += 1
-                    if contador_troca >= CONFIRMACOES_TROCA:
-                        rotulo_atual = classe_janela
-                        contador_troca = 0
+                    x, y, w, h = face.left(), face.top(), face.width(), face.height()
+                    cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
                 else:
-                    contador_troca = 0
+                    ear = None
 
-                nome, emoji = rotulos[rotulo_atual]
-                confianca = media[rotulo_atual]
-                resultado_placeholder.markdown(f"### {emoji} {nome}")
-                confianca_placeholder.progress(
-                    float(confianca),
-                    text=f"Confiança na janela: {confianca:.0%} · Score: {ema_score:.2f}/3",
-                )
-                status_placeholder.caption(
-                    f"{len(janela_proba)}/{JANELA_MAX} amostras na janela"
-                )
+                if len(janela_proba) >= MIN_AMOSTRAS:
+                    media = np.mean(janela_proba, axis=0)
+                    p_eng = prob_engajado(media)
+                    ema_prob = p_eng if ema_prob is None else \
+                        ALPHA_EMA * p_eng + (1 - ALPHA_EMA) * ema_prob
 
-                if face is not None and rotulo_atual is not None:
-                    cv2.putText(
-                        frame, nome, (face.left(), max(face.top() - 10, 20)),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2,
+                    if olhos_fechados:
+                        engajado = False
+                        rotulo = "🔴 Não engajado (olhos fechados)"
+                    elif ema_prob >= LIMIAR_ENGAJADO:
+                        engajado = True
+                        rotulo = "🟢 Engajado"
+                    else:
+                        engajado = False
+                        rotulo = "🟠 Não engajado"
+
+                    resultado_placeholder.markdown(f"### {rotulo}")
+                    barra_placeholder.progress(
+                        float(ema_prob),
+                        text=f"P(engajado) = {ema_prob:.0%}",
                     )
-            else:
-                resultado_placeholder.markdown("### ⏳ Coletando amostras…")
-                status_placeholder.caption(
-                    f"{len(janela_proba)}/{MIN_AMOSTRAS} amostras mínimas"
-                )
+                    txt_status = f"{len(janela_proba)}/{JANELA_MAX} amostras"
+                    if ear is not None:
+                        txt_status += f" · EAR={ear:.2f}"
+                    status_placeholder.caption(txt_status)
+                    historico_score.append(ema_prob)
 
-            if not rosto_valido:
-                status_placeholder.caption("⚠️ Nenhum rosto frontal válido neste frame")
+                    # Registra a amostra no relatório da sessão
+                    agora = time.time()
+                    st.session_state["historico"].append({
+                        "horario": datetime.now().strftime("%H:%M:%S"),
+                        "segundos": round(agora - t_inicio, 1),
+                        "prob_engajado": round(float(ema_prob), 3),
+                        "engajado": bool(engajado),
+                        "olhos_fechados": bool(olhos_fechados),
+                        "ear": round(float(ear), 3) if ear is not None else None,
+                    })
+                else:
+                    resultado_placeholder.markdown("### ⏳ Coletando amostras…")
+                    status_placeholder.caption(
+                        f"{len(janela_proba)}/{MIN_AMOSTRAS} amostras mínimas"
+                    )
 
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            frame_placeholder.image(frame_rgb, channels="RGB")
+                if not rosto_valido:
+                    status_placeholder.caption("⚠️ Nenhum rosto frontal válido neste frame")
 
-            if len(historico_score) >= 2:
-                grafico_placeholder.line_chart(
-                    pd.DataFrame({"Engajamento (0–3)": list(historico_score)})
-                )
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                frame_placeholder.image(frame_rgb, channels="RGB")
 
-            # Throttle para ~FPS_ALVO
-            espera = (1.0 / FPS_ALVO) - (time.time() - inicio)
-            if espera > 0:
-                time.sleep(espera)
-    finally:
-        cap.release()
+                if len(historico_score) >= 2:
+                    grafico_placeholder.line_chart(
+                        pd.DataFrame({"P(engajado)": list(historico_score)})
+                    )
+
+                espera = (1.0 / FPS_ALVO) - (time.time() - inicio)
+                if espera > 0:
+                    time.sleep(espera)
+        finally:
+            cap.release()
+    else:
+        st.session_state["_capturando"] = False
+
+    # --- Relatório da sessão (aparece depois que a webcam é desligada) ---
+    historico = st.session_state.get("historico", [])
+    if historico and not iniciar:
+        st.divider()
+        st.subheader("Relatório da sessão")
+        df, resumo = montar_relatorio(historico)
+
+        st.table(pd.DataFrame(resumo.items(), columns=["Métrica", "Valor"]))
+        st.line_chart(df.set_index("segundos")[["prob_engajado"]])
+
+        carimbo = datetime.now().strftime("%Y%m%d_%H%M%S")
+        st.download_button(
+            "⬇️ Baixar relatório (CSV)",
+            data=df.to_csv(index=False).encode("utf-8"),
+            file_name=f"relatorio_engajamento_{carimbo}.csv",
+            mime="text/csv",
+        )
+        resumo_txt = "\n".join(f"{k}: {v}" for k, v in resumo.items())
+        st.download_button(
+            "⬇️ Baixar resumo (TXT)",
+            data=resumo_txt.encode("utf-8"),
+            file_name=f"resumo_engajamento_{carimbo}.txt",
+            mime="text/plain",
+        )
+        if st.button("Limpar relatório"):
+            st.session_state["historico"] = []
+            st.rerun()

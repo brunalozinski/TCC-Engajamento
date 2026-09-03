@@ -1,0 +1,8 @@
+Início: 00:07:58
+Fim: 00:15:00
+Duração (s): 422.4
+Amostras: 836
+% do tempo engajado: 34%
+P(engajado) média: 0.42
+P(engajado) mínima: 0.18
+P(engajado) máxima: 0.68

@@ -16,3 +16,6 @@ paginas/__pycache__/
 .venv/
 venv/
 .vscode/
+
+# Backups locais
+backup_*/
