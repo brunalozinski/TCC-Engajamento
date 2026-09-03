@@ -27,6 +27,7 @@ scipy==1.17.1
 seaborn==0.13.2
 six==1.17.0
 sounddevice==0.5.5
+streamlit==1.57.0
 threadpoolctl==3.6.0
 tqdm==4.67.3
 tzdata==2026.2
