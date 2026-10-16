@@ -1,0 +1,155 @@
+DAiSEE: RESULTADOS (somente DAiSEE)
+==============================================================================
+Clipes usados: 8570 de 8570 (>= 3 frames com rosto) | pessoas: 109
+
+Clipes por divisao e nivel de Engagement:
+col_0        0    1     2     3  total
+row_0                                 
+Test         4   84   882   814   1784
+Train       34  213  2617  2493   5357
+Validation  23  143   813   450   1429
+
+binario: nao engajado = 501 (5.8%), engajado = 8069
+
+##############################################################################
+TAREFA: binario   (acaso da acuracia balanceada = 0.5)
+##############################################################################
+
+-- A) Divisao oficial: TESTE (acuracia balanceada) --
+modelo                      Chute_classe_comum  MLP  Random_Forest  Reg_Logistica    SVM
+config                                                                                  
+bruto | centro_pessoa                      0.5  0.5            0.5          0.568  0.497
+bruto | nenhuma                            0.5  0.5            0.5          0.631  0.589
+geometrico | centro_pessoa                 0.5  0.5            0.5          0.648  0.515
+geometrico | nenhuma                       0.5  0.5            0.5          0.667  0.529
+
+-- A) Divisao oficial: VALIDACAO (acuracia balanceada) --
+modelo                      Chute_classe_comum  MLP  Random_Forest  Reg_Logistica    SVM
+config                                                                                  
+bruto | centro_pessoa                      0.5  0.5            0.5          0.594  0.536
+bruto | nenhuma                            0.5  0.5            0.5          0.580  0.516
+geometrico | centro_pessoa                 0.5  0.5            0.5          0.567  0.520
+geometrico | nenhuma                       0.5  0.5            0.5          0.599  0.541
+
+-- B) CV por pessoa, 5 dobras: media da acuracia balanceada --
+modelo                      Chute_classe_comum    MLP  Random_Forest  Reg_Logistica    SVM
+config                                                                                    
+bruto | centro_pessoa                      0.5  0.500          0.500          0.599  0.575
+bruto | nenhuma                            0.5  0.503          0.501          0.614  0.573
+geometrico | centro_pessoa                 0.5  0.504          0.500          0.596  0.530
+geometrico | nenhuma                       0.5  0.501          0.500          0.618  0.546
+-- B) desvio entre as dobras --
+modelo                      Chute_classe_comum    MLP  Random_Forest  Reg_Logistica    SVM
+config                                                                                    
+bruto | centro_pessoa                      0.0  0.000          0.000          0.046  0.017
+bruto | nenhuma                            0.0  0.006          0.005          0.044  0.065
+geometrico | centro_pessoa                 0.0  0.005          0.000          0.069  0.025
+geometrico | nenhuma                       0.0  0.002          0.000          0.063  0.031
+
+-- AUC (media das dobras do B; 0,5 = sem sinal) --
+modelo                        MLP  Random_Forest  Reg_Logistica    SVM
+config                                                                
+bruto | centro_pessoa       0.436          0.606          0.620  0.642
+bruto | nenhuma             0.479          0.577          0.638  0.586
+geometrico | centro_pessoa  0.478          0.653          0.636  0.593
+geometrico | nenhuma        0.577          0.676          0.676  0.626
+
+-- AUC no TESTE oficial --
+modelo                        MLP  Random_Forest  Reg_Logistica    SVM
+config                                                                
+bruto | centro_pessoa       0.307          0.541          0.579  0.536
+bruto | nenhuma             0.435          0.616          0.701  0.617
+geometrico | centro_pessoa  0.352          0.687          0.650  0.565
+geometrico | nenhuma        0.430          0.699          0.741  0.620
+
+##############################################################################
+TAREFA: 4_niveis   (acaso da acuracia balanceada = 0.25)
+##############################################################################
+
+-- A) Divisao oficial: TESTE (acuracia balanceada) --
+modelo                      Chute_classe_comum    MLP  Random_Forest  Reg_Logistica    SVM
+config                                                                                    
+bruto | centro_pessoa                     0.25  0.255          0.251          0.320  0.296
+bruto | nenhuma                           0.25  0.261          0.242          0.412  0.333
+geometrico | centro_pessoa                0.25  0.255          0.253          0.339  0.254
+geometrico | nenhuma                      0.25  0.255          0.240          0.346  0.271
+
+-- A) Divisao oficial: VALIDACAO (acuracia balanceada) --
+modelo                      Chute_classe_comum    MLP  Random_Forest  Reg_Logistica    SVM
+config                                                                                    
+bruto | centro_pessoa                     0.25  0.276          0.268          0.291  0.287
+bruto | nenhuma                           0.25  0.277          0.246          0.298  0.295
+geometrico | centro_pessoa                0.25  0.257          0.258          0.289  0.292
+geometrico | nenhuma                      0.25  0.258          0.270          0.294  0.296
+
+-- B) CV por pessoa, 5 dobras: media da acuracia balanceada --
+modelo                      Chute_classe_comum    MLP  Random_Forest  Reg_Logistica    SVM
+config                                                                                    
+bruto | centro_pessoa                     0.25  0.260          0.265          0.318  0.317
+bruto | nenhuma                           0.25  0.275          0.258          0.327  0.346
+geometrico | centro_pessoa                0.25  0.267          0.265          0.356  0.278
+geometrico | nenhuma                      0.25  0.275          0.269          0.358  0.301
+-- B) desvio entre as dobras --
+modelo                      Chute_classe_comum    MLP  Random_Forest  Reg_Logistica    SVM
+config                                                                                    
+bruto | centro_pessoa                      0.0  0.008          0.006          0.046  0.033
+bruto | nenhuma                            0.0  0.015          0.019          0.035  0.024
+geometrico | centro_pessoa                 0.0  0.007          0.008          0.062  0.021
+geometrico | nenhuma                       0.0  0.009          0.005          0.035  0.029
+
+-- Recall por nivel (CV, SVM, geometrico | centro_pessoa) --
+recall_0    0.000
+recall_1    0.155
+recall_2    0.435
+recall_3    0.522
+
+##############################################################################
+TAREFA: 2_vs_3   (acaso da acuracia balanceada = 0.5)
+##############################################################################
+
+-- A) Divisao oficial: TESTE (acuracia balanceada) --
+modelo                      Chute_classe_comum    MLP  Random_Forest  Reg_Logistica    SVM
+config                                                                                    
+bruto | centro_pessoa                      0.5  0.501          0.498          0.502  0.507
+bruto | nenhuma                            0.5  0.491          0.493          0.498  0.508
+geometrico | centro_pessoa                 0.5  0.525          0.504          0.520  0.514
+geometrico | nenhuma                       0.5  0.489          0.468          0.530  0.492
+
+-- A) Divisao oficial: VALIDACAO (acuracia balanceada) --
+modelo                      Chute_classe_comum    MLP  Random_Forest  Reg_Logistica    SVM
+config                                                                                    
+bruto | centro_pessoa                      0.5  0.560          0.540          0.550  0.537
+bruto | nenhuma                            0.5  0.546          0.491          0.540  0.514
+geometrico | centro_pessoa                 0.5  0.523          0.536          0.529  0.522
+geometrico | nenhuma                       0.5  0.535          0.531          0.515  0.533
+
+-- B) CV por pessoa, 5 dobras: media da acuracia balanceada --
+modelo                      Chute_classe_comum    MLP  Random_Forest  Reg_Logistica    SVM
+config                                                                                    
+bruto | centro_pessoa                      0.5  0.526          0.522          0.539  0.540
+bruto | nenhuma                            0.5  0.539          0.512          0.552  0.551
+geometrico | centro_pessoa                 0.5  0.536          0.534          0.546  0.540
+geometrico | nenhuma                       0.5  0.553          0.523          0.543  0.549
+-- B) desvio entre as dobras --
+modelo                      Chute_classe_comum    MLP  Random_Forest  Reg_Logistica    SVM
+config                                                                                    
+bruto | centro_pessoa                      0.0  0.017          0.008          0.003  0.014
+bruto | nenhuma                            0.0  0.012          0.014          0.029  0.024
+geometrico | centro_pessoa                 0.0  0.021          0.020          0.012  0.017
+geometrico | nenhuma                       0.0  0.006          0.020          0.016  0.038
+
+-- AUC (media das dobras do B; 0,5 = sem sinal) --
+modelo                        MLP  Random_Forest  Reg_Logistica    SVM
+config                                                                
+bruto | centro_pessoa       0.548          0.532          0.558  0.556
+bruto | nenhuma             0.554          0.531          0.578  0.574
+geometrico | centro_pessoa  0.553          0.555          0.564  0.554
+geometrico | nenhuma        0.577          0.547          0.563  0.571
+
+-- AUC no TESTE oficial --
+modelo                        MLP  Random_Forest  Reg_Logistica    SVM
+config                                                                
+bruto | centro_pessoa       0.514          0.500          0.512  0.506
+bruto | nenhuma             0.502          0.486          0.499  0.517
+geometrico | centro_pessoa  0.541          0.518          0.536  0.511
+geometrico | nenhuma        0.491          0.487          0.529  0.491

@@ -19,3 +19,18 @@ venv/
 
 # Backups locais
 backup_*/
+
+# Datasets com rostos / licenca restrita e backups (nao versionar)
+DAiSEE/
+ER_Dataset_Externo/
+ER_Dataset_Unificado/
+dataset/
+dataset-2/
+fine tuning/data/
+backup_*.zip
+
+# Logs temporarios
+*log*.txt
+reaval_*.log
+reavaliar_progresso.txt
+doc/.$*

@@ -1,0 +1,169 @@
+ETAPA 2b - ROBUSTEZ: varias sementes, com/sem EED, ablacao por grupo
+============================================================================
+Sementes (Random Forest e MLP): [0, 1, 2, 3, 4]. Acaso = 0,50.
+
+############################################################################
+CENARIO: com EED
+############################################################################
+
+-- Fonte_de_fora: nota media entre os grupos de teste (3 grupos) --
+             mean                                       std                                   
+modelo        MLP Random_Forest Reg_Logistica    SVM    MLP Random_Forest Reg_Logistica    SVM
+features                                                                                      
+bruto       0.583         0.582         0.569  0.553  0.063         0.080         0.034  0.061
+geometrico  0.577         0.542         0.581  0.560  0.045         0.064         0.051  0.061
+
+   Geometrico menos bruto (positivo = geometrico melhor):
+               media_dif  grupos_onde_geo_ganha  total_grupos
+modelo                                                       
+MLP               -0.006                      1             3
+Random_Forest     -0.040                      1             3
+Reg_Logistica      0.012                      2             3
+SVM                0.007                      1             3
+
+   Desvio medio causado so pela semente (RF e MLP):
+features    modelo       
+bruto       MLP              0.017
+            Random_Forest    0.003
+geometrico  MLP              0.013
+            Random_Forest    0.006
+
+-- LOPO: nota media entre os grupos de teste (9 grupos) --
+             mean                                       std                                   
+modelo        MLP Random_Forest Reg_Logistica    SVM    MLP Random_Forest Reg_Logistica    SVM
+features                                                                                      
+bruto       0.533         0.510         0.544  0.547  0.112         0.191         0.144  0.163
+geometrico  0.544         0.507         0.547  0.589  0.146         0.176         0.136  0.143
+
+   Geometrico menos bruto (positivo = geometrico melhor):
+               media_dif  grupos_onde_geo_ganha  total_grupos
+modelo                                                       
+MLP                0.011                      4             9
+Random_Forest     -0.003                      6             9
+Reg_Logistica      0.004                      6             9
+SVM                0.042                      6             9
+
+   Desvio medio causado so pela semente (RF e MLP):
+features    modelo       
+bruto       MLP              0.039
+            Random_Forest    0.024
+geometrico  MLP              0.026
+            Random_Forest    0.022
+
+-- Ablacao por grupo de features (SVM), com_EED --
+protocolo            Fonte_de_fora   LOPO  queda_Fonte  queda_LOPO
+features                                                          
+geo_completo                 0.560  0.589        0.000       0.000
+geo_sem_boca                 0.526  0.563        0.034       0.026
+geo_sem_cabeca               0.554  0.589        0.006       0.000
+geo_sem_olhos                0.524  0.539        0.036       0.050
+geo_sem_rosto                0.536  0.553        0.024       0.036
+geo_sem_sobrancelha          0.581  0.549       -0.021       0.040
+(queda positiva = tirar o grupo piorou; o grupo importa)
+
+############################################################################
+CENARIO: sem EED
+############################################################################
+
+-- Fonte_de_fora: nota media entre os grupos de teste (2 grupos) --
+             mean                                       std                                   
+modelo        MLP Random_Forest Reg_Logistica    SVM    MLP Random_Forest Reg_Logistica    SVM
+features                                                                                      
+bruto       0.551         0.525         0.529  0.535  0.063         0.006         0.026  0.023
+geometrico  0.534         0.508         0.513  0.511  0.043         0.032         0.031  0.011
+
+   Geometrico menos bruto (positivo = geometrico melhor):
+               media_dif  grupos_onde_geo_ganha  total_grupos
+modelo                                                       
+MLP               -0.017                      0             2
+Random_Forest     -0.018                      1             2
+Reg_Logistica     -0.016                      0             2
+SVM               -0.024                      0             2
+
+   Desvio medio causado so pela semente (RF e MLP):
+features    modelo       
+bruto       MLP              0.013
+            Random_Forest    0.011
+geometrico  MLP              0.012
+            Random_Forest    0.003
+
+-- LOPO: nota media entre os grupos de teste (8 grupos) --
+             mean                                       std                                   
+modelo        MLP Random_Forest Reg_Logistica    SVM    MLP Random_Forest Reg_Logistica    SVM
+features                                                                                      
+bruto       0.529         0.508         0.543  0.533  0.112         0.156         0.138  0.177
+geometrico  0.532         0.538         0.521  0.552  0.143         0.185         0.135  0.130
+
+   Geometrico menos bruto (positivo = geometrico melhor):
+               media_dif  grupos_onde_geo_ganha  total_grupos
+modelo                                                       
+MLP                0.003                      3             8
+Random_Forest      0.030                      5             8
+Reg_Logistica     -0.022                      4             8
+SVM                0.019                      5             8
+
+   Desvio medio causado so pela semente (RF e MLP):
+features    modelo       
+bruto       MLP              0.044
+            Random_Forest    0.015
+geometrico  MLP              0.038
+            Random_Forest    0.025
+
+-- Ablacao por grupo de features (SVM), sem_EED --
+protocolo            Fonte_de_fora   LOPO  queda_Fonte  queda_LOPO
+features                                                          
+geo_completo                 0.511  0.552        0.000       0.000
+geo_sem_boca                 0.504  0.584        0.007      -0.032
+geo_sem_cabeca               0.504  0.581        0.007      -0.029
+geo_sem_olhos                0.549  0.533       -0.038       0.019
+geo_sem_rosto                0.499  0.556        0.012      -0.004
+geo_sem_sobrancelha          0.481  0.551        0.030       0.001
+(queda positiva = tirar o grupo piorou; o grupo importa)
+
+-- Detalhe por grupo de teste (bruto x geometrico) --
+modelo                                        MLP  Random_Forest  Reg_Logistica    SVM
+cenario protocolo     teste     features                                              
+com_EED Fonte_de_fora EED       bruto       0.651          0.675          0.596  0.624
+                                geometrico  0.628          0.604          0.620  0.606
+                      dataset   bruto       0.527          0.528          0.530  0.521
+                                geometrico  0.540          0.476          0.524  0.491
+                      unificado bruto       0.570          0.545          0.579  0.514
+                                geometrico  0.563          0.546          0.599  0.582
+        LOPO          D:img1    bruto       0.582          0.530          0.519  0.753
+                                geometrico  0.713          0.624          0.564  0.824
+                      EED       bruto       0.651          0.675          0.596  0.624
+                                geometrico  0.628          0.604          0.620  0.606
+                      U:kE      bruto       0.658          0.788          0.741  0.799
+                                geometrico  0.719          0.802          0.851  0.775
+                      U:p1      bruto       0.691          0.591          0.538  0.587
+                                geometrico  0.619          0.632          0.506  0.682
+                      U:p2      bruto       0.433          0.520          0.391  0.409
+                                geometrico  0.362          0.282          0.410  0.414
+                      U:p3      bruto       0.418          0.584          0.641  0.450
+                                geometrico  0.587          0.487          0.507  0.475
+                      U:p4      bruto       0.449          0.183          0.709  0.500
+                                geometrico  0.379          0.264          0.440  0.477
+                      U:p5      bruto       0.423          0.254          0.450  0.285
+                                geometrico  0.355          0.399          0.597  0.520
+                      U:p6      bruto       0.492          0.468          0.307  0.518
+                                geometrico  0.535          0.473          0.433  0.529
+sem_EED Fonte_de_fora dataset   bruto       0.507          0.521          0.547  0.519
+                                geometrico  0.504          0.485          0.535  0.504
+                      unificado bruto       0.596          0.529          0.510  0.552
+                                geometrico  0.565          0.530          0.491  0.519
+        LOPO          D:img1    bruto       0.655          0.527          0.555  0.749
+                                geometrico  0.765          0.793          0.546  0.799
+                      U:kE      bruto       0.572          0.683          0.573  0.534
+                                geometrico  0.634          0.729          0.750  0.552
+                      U:p1      bruto       0.687          0.588          0.592  0.617
+                                geometrico  0.625          0.690          0.509  0.682
+                      U:p2      bruto       0.432          0.448          0.413  0.466
+                                geometrico  0.390          0.322          0.380  0.392
+                      U:p3      bruto       0.430          0.509          0.581  0.469
+                                geometrico  0.583          0.568          0.594  0.501
+                      U:p4      bruto       0.540          0.526          0.802  0.664
+                                geometrico  0.392          0.366          0.320  0.493
+                      U:p5      bruto       0.369          0.166          0.490  0.165
+                                geometrico  0.367          0.351          0.596  0.461
+                      U:p6      bruto       0.545          0.616          0.337  0.600
+                                geometrico  0.500          0.485          0.471  0.534

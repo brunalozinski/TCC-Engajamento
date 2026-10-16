@@ -1,0 +1,102 @@
+ETAPA 2 - ABLACAO DE FEATURES (binario, acaso da acuracia balanceada = 0,50)
+============================================================================
+Imagens: 7420 | LOPO nos grupos com >= 30 imagens de cada classe: D:img1, EED, U:kE, U:p1, U:p2, U:p3
+
+############################################################################
+A) UM DATASET INTEIRO DE FORA
+############################################################################
+
+-- Acuracia balanceada media entre os grupos de teste --
+modelo        MLP  Random_Forest  Reg_Logistica    SVM
+features                                              
+bruto       0.589          0.603          0.581  0.569
+bruto+geo   0.598          0.598          0.589  0.614
+geometrico  0.611          0.598          0.601  0.649
+
+-- Desvio entre os grupos de teste --
+modelo        MLP  Random_Forest  Reg_Logistica    SVM
+features                                              
+bruto       0.074          0.076          0.045  0.043
+bruto+geo   0.071          0.068          0.052  0.060
+geometrico  0.009          0.005          0.052  0.024
+
+-- Detalhe por grupo de teste --
+modelo                  MLP  Random_Forest  Reg_Logistica    SVM
+teste     features                                              
+EED       bruto       0.621          0.677          0.608  0.617
+          bruto+geo   0.634          0.656          0.631  0.640
+          geometrico  0.620          0.603          0.630  0.673
+dataset   bruto       0.504          0.525          0.529  0.553
+          bruto+geo   0.516          0.523          0.531  0.546
+          geometrico  0.601          0.598          0.541  0.649
+unificado bruto       0.642          0.608          0.607  0.536
+          bruto+geo   0.644          0.615          0.606  0.656
+          geometrico  0.611          0.592          0.632  0.624
+
+############################################################################
+B) LOPO (grupos com amostra suficiente)
+############################################################################
+
+-- Acuracia balanceada media entre os grupos de teste --
+modelo        MLP  Random_Forest  Reg_Logistica    SVM
+features                                              
+bruto       0.592          0.595          0.592  0.592
+bruto+geo   0.590          0.570          0.599  0.608
+geometrico  0.595          0.551          0.602  0.661
+
+-- Desvio entre os grupos de teste --
+modelo        MLP  Random_Forest  Reg_Logistica    SVM
+features                                              
+bruto       0.115          0.140          0.151  0.119
+bruto+geo   0.117          0.139          0.171  0.147
+geometrico  0.101          0.174          0.139  0.152
+
+-- Detalhe por grupo de teste --
+modelo               MLP  Random_Forest  Reg_Logistica    SVM
+teste  features                                              
+D:img1 bruto       0.604          0.514          0.506  0.676
+       bruto+geo   0.541          0.541          0.510  0.839
+       geometrico  0.613          0.514          0.591  0.812
+EED    bruto       0.621          0.677          0.608  0.617
+       bruto+geo   0.634          0.656          0.631  0.640
+       geometrico  0.620          0.603          0.630  0.673
+U:kE   bruto       0.617          0.777          0.802  0.750
+       bruto+geo   0.630          0.762          0.832  0.687
+       geometrico  0.705          0.776          0.839  0.787
+U:p1   bruto       0.690          0.635          0.497  0.602
+       bruto+geo   0.759          0.617          0.497  0.574
+       geometrico  0.649          0.672          0.509  0.708
+U:p2   bruto       0.365          0.372          0.408  0.446
+       bruto+geo   0.409          0.367          0.375  0.448
+       geometrico  0.410          0.278          0.427  0.398
+U:p3   bruto       0.653          0.597          0.732  0.463
+       bruto+geo   0.568          0.478          0.751  0.464
+       geometrico  0.572          0.461          0.618  0.590
+
+############################################################################
+C) AUC UNIVARIADO DE CADA FEATURE GEOMETRICA
+############################################################################
+(0,5 = sem sinal; 'consistente' = mesmo sentido nas 3 fontes)
+
+                            unificado  dataset    EED  consistente  forca_min
+feature                                                                      
+sobr_olho_esq                   0.251    0.260  0.356         True      0.144
+sobr_olho_medio                 0.243    0.261  0.357         True      0.143
+ear_medio                       0.363    0.736  0.140        False      0.137
+ear_esq                         0.366    0.745  0.146        False      0.134
+sobr_olho_dir                   0.246    0.271  0.366         True      0.134
+ear_dir                         0.367    0.730  0.162        False      0.133
+nariz_linha_olhos               0.431    0.578  0.586        False      0.069
+yaw                             0.424    0.437  0.563        False      0.063
+rosto_razao_largura_altura      0.588    0.561  0.569         True      0.061
+boca_largura                    0.695    0.445  0.884        False      0.055
+ear_diferenca                   0.451    0.422  0.276         True      0.049
+pitch                           0.456    0.626  0.639        False      0.044
+mar_interno                     0.597    0.460  0.635        False      0.040
+boca_curvatura                  0.442    0.467  0.108         True      0.033
+sobr_inclin_dir                 0.548    0.465  0.475        False      0.025
+boca_altura                     0.684    0.400  0.522        False      0.022
+sobr_distancia_interna          0.310    0.479  0.559        False      0.021
+sobr_inclin_esq                 0.512    0.449  0.446        False      0.012
+queixo_nariz                    0.490    0.356  0.352         True      0.010
+roll                            0.569    0.503  0.532         True      0.003

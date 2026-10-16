@@ -1,0 +1,99 @@
+AVALIACAO BINARIA COM TRES FONTES DE DADOS
+========================================================================
+Imagens com rosto: 8317  (engajado=5622, nao engajado=2695)
+
+Imagens por fonte x classe:
+col_0      nao_engajado  engajado
+row_0                            
+EED                 429      1891
+dataset             237      1481
+unificado          2029      2250
+
+Grupos avaliados no LOPO (>= 50 imagens): 24
+Acaso da acuracia balanceada = 0,50.
+
+########################################################################
+A) LOPO: um grupo (pessoa) de fora por vez
+########################################################################
+
+-- Agregado (todas as predicoes juntas) --
+            modelo  acuracia  acuracia_bal  f1_macro
+               SVM     0.631         0.649     0.618
+     Random_Forest     0.693         0.638     0.640
+               MLP     0.584         0.616     0.577
+     Reg_Logistica     0.606         0.618     0.591
+Chute_classe_comum     0.681         0.500     0.405
+
+-- Media por grupo, so grupos com as duas classes (21 grupos) --
+                   acuracia_bal        f1_macro       
+                           mean    std     mean    std
+modelo                                                
+Chute_classe_comum        0.500  0.000    0.435  0.069
+MLP                       0.638  0.172    0.526  0.170
+Random_Forest             0.568  0.166    0.536  0.151
+Reg_Logistica             0.601  0.133    0.505  0.124
+SVM                       0.640  0.170    0.556  0.193
+
+-- Acuracia balanceada por grupo (NaN = grupo com uma classe so) --
+modelo   Chute_classe_comum    MLP  Random_Forest  Reg_Logistica    SVM
+teste                                                                  
+D:img1                  0.5  0.482          0.527          0.519  0.753
+D:img11                 0.5  0.937          0.840          0.821  0.912
+D:img13                 0.5  0.724          0.679          0.744  0.647
+D:img14                 0.5  0.470          0.482          0.433  0.713
+D:img17                 0.5  0.773          0.500          0.582  0.636
+D:img20                 0.5  0.626          0.578          0.684  0.641
+D:img21                 0.5  0.778          0.469          0.684  0.670
+D:img23                 0.5  0.655          0.646          0.600  0.711
+D:img3                  0.5  0.677          0.500          0.544  0.495
+D:img4                  0.5  0.808          0.994          0.584  1.000
+D:img6                  0.5  0.859          0.500          0.615  0.672
+D:img7                  0.5  0.680          0.496          0.643  0.565
+D:img9                  0.5  0.833          0.510          0.802  0.844
+EED                     0.5  0.648          0.671          0.596  0.624
+U:kA                    NaN    NaN            NaN            NaN    NaN
+U:kC                    NaN    NaN            NaN            NaN    NaN
+U:kE                    0.5  0.716          0.765          0.741  0.799
+U:kF                    NaN    NaN            NaN            NaN    NaN
+U:p1                    0.5  0.680          0.600          0.538  0.587
+U:p2                    0.5  0.429          0.578          0.391  0.409
+U:p3                    0.5  0.438          0.587          0.641  0.450
+U:p4                    0.5  0.411          0.245          0.709  0.500
+U:p5                    0.5  0.315          0.305          0.450  0.285
+U:p6                    0.5  0.449          0.454          0.307  0.518
+
+########################################################################
+B) UM DATASET INTEIRO DE FORA (treina nos outros dois)
+########################################################################
+
+-- Agregado (todas as predicoes juntas) --
+            modelo  acuracia  acuracia_bal  f1_macro
+               SVM     0.506         0.544     0.503
+     Random_Forest     0.596         0.541     0.541
+               MLP     0.564         0.596     0.558
+     Reg_Logistica     0.562         0.569     0.547
+Chute_classe_comum     0.676         0.500     0.403
+
+-- Media por grupo, so grupos com as duas classes (3 grupos) --
+                   acuracia_bal        f1_macro       
+                           mean    std     mean    std
+modelo                                                
+Chute_classe_comum        0.500  0.000    0.419  0.065
+MLP                       0.585  0.063    0.516  0.072
+Random_Forest             0.583  0.077    0.535  0.091
+Reg_Logistica             0.569  0.034    0.507  0.093
+SVM                       0.553  0.061    0.463  0.119
+
+-- Acuracia balanceada por grupo (NaN = grupo com uma classe so) --
+modelo     Chute_classe_comum    MLP  Random_Forest  Reg_Logistica    SVM
+teste                                                                    
+EED                       0.5  0.648          0.671          0.596  0.624
+dataset                   0.5  0.521          0.535          0.530  0.521
+unificado                 0.5  0.586          0.541          0.579  0.514
+
+-- Acuracia simples por dataset --
+modelo     Chute_classe_comum    MLP  Random_Forest  Reg_Logistica    SVM
+teste                                                                    
+EED                     0.815  0.572          0.727          0.617  0.627
+dataset                 0.862  0.511          0.529          0.444  0.340
+unificado               0.526  0.581          0.552          0.579  0.508

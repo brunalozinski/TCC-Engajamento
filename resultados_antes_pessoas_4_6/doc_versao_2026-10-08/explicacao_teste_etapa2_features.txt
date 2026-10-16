@@ -1,0 +1,200 @@
+EXPLICACAO DO TESTE DA ETAPA 2: FEATURES "BRUTAS" x "GEOMETRICAS"
+Texto escrito para ser explicado em voz alta (por exemplo, ao orientador).
+Resultados completos: relatorio_etapa2_features.txt e resultados_etapa2.csv
+======================================================================
+
+1. QUAL ERA A PERGUNTA
+----------------------------------------------------------------------
+Os modelos so acertavam por volta de 50% (o acaso) quando viam uma pessoa
+nova. Uma das suspeitas era que o jeito de descrever o rosto para o modelo
+(as "features") fosse ruim. Entao a pergunta foi:
+
+   "Se em vez de dar ao modelo as coordenadas dos pontos do rosto, dermos
+    medidas que fazem sentido (olho aberto, boca aberta, cabeca virada...),
+    ele passa a acertar mais em pessoas novas?"
+
+
+2. O QUE SAO AS DUAS VERSOES COMPARADAS
+----------------------------------------------------------------------
+BRUTO (136 numeros)
+  O dlib marca 68 pontos no rosto. Cada ponto tem x e y: 68 x 2 = 136
+  numeros. Sao so coordenadas. O modelo precisa descobrir sozinho o que
+  elas significam.
+
+GEOMETRICO (20 numeros)
+  Medidas calculadas a partir dos mesmos pontos, cada uma com significado:
+   - Olhos: EAR (quao abertos estao os olhos).
+   - Boca: MAR (boca aberta), largura, altura, curvatura (sorriso/boca
+     caida).
+   - Sobrancelha: distancia ate o olho e inclinacao (levantada/franzida).
+   - Cabeca: yaw (virada para o lado), pitch (para cima/baixo), roll
+     (inclinada). Sao estimativas 2D simples, nao a pose 3D exata.
+   - Rosto: proporcao largura/altura e distancias queixo-nariz.
+
+BRUTO + GEOMETRICO (156 numeros)
+  Os dois juntos, para ver se a soma ajuda.
+
+Analogia: bruto = entregar as coordenadas de cada ponto no mapa;
+geometrico = entregar as respostas de perguntas como "os olhos estao
+abertos?" e "a cabeca esta virada?".
+
+
+3. OS DADOS USADOS
+----------------------------------------------------------------------
+Tres fontes de imagens, com 7.420 rostos detectados:
+  - ER_Dataset_Unificado: Kaggle (5 pessoas) + 3 pessoas gravadas por nos.
+  - dataset: 3 classes originais; "Parcialmente engajado" foi EXCLUIDO.
+  - dataset-2 (EED): so os extremos claros. Engajado = interested,
+    stimulated, fulfilled, satisfied. Nao engajado = distracted.
+
+Tarefa BINARIA: engajado (1) x nao engajado (0).
+Como ha mais "engajado" que "nao engajado", usamos ACURACIA BALANCEADA: a
+media do acerto em cada classe. Chutar tudo na classe mais comum da 0,50.
+Ou seja, 0,50 = acaso e quanto acima disso, melhor.
+
+
+4. COMO O TESTE FOI FEITO (A PARTE MAIS IMPORTANTE)
+----------------------------------------------------------------------
+O teste tem que simular o uso real: o modelo ve alguem NOVO. Por isso, o
+treino e o teste nunca compartilham pessoas. Dois protocolos:
+
+ A) Dataset inteiro de fora
+    Treina com duas fontes e testa na terceira (3 rodadas). E o teste mais
+    duro: outras pessoas, outra camera, outra iluminacao, outro criterio de
+    rotulo.
+
+ B) Uma pessoa de fora por vez (LOPO = leave-one-person-out)
+    Treina com todo mundo menos uma pessoa e testa nela. Foi feito so nos
+    grupos com pelo menos 30 imagens de CADA classe (6 grupos), porque
+    grupos com poucos exemplos de uma classe dao notas muito instaveis.
+
+Quatro modelos foram usados: SVM, Random Forest, MLP e Regressao Logistica.
+
+
+5. O QUE ACONTECEU
+----------------------------------------------------------------------
+Acuracia balanceada media (acaso = 0,50):
+
+  A) Dataset de fora       MLP    RF     RegLog  SVM
+     bruto                0,589  0,603  0,581   0,569
+     geometrico           0,611  0,598  0,601   0,649
+     bruto+geometrico     0,598  0,598  0,589   0,614
+
+  B) LOPO                  MLP    RF     RegLog  SVM
+     bruto                0,592  0,595  0,592   0,592
+     geometrico           0,595  0,551  0,602   0,661
+     bruto+geometrico     0,590  0,570  0,599   0,608
+
+Leitura simples:
+  - 20 medidas fazem o mesmo trabalho que 136 coordenadas, ou um pouco
+    mais. Isso e bom: menos numeros e todos explicaveis.
+  - O ganho claro foi no SVM (de ~0,58 para ~0,65). Nos outros modelos a
+    diferenca e de 0 a 2 pontos, ou seja, nenhuma.
+  - Todos continuam pouco acima do acaso (0,55 a 0,66). Melhorou, mas
+    ainda nao resolve o problema.
+
+
+6. QUAIS MEDIDAS TEM SINAL (AUC POR FEATURE)
+----------------------------------------------------------------------
+AUC mede, para UMA medida sozinha, o quanto ela separa engajado de nao
+engajado: 0,5 = nao separa; longe de 0,5 = separa. Se o sentido for o mesmo
+nas tres fontes, o sinal e consistente.
+
+  - Distancia sobrancelha-olho: consistente nas 3 fontes (AUC 0,24 a 0,36).
+    Sobrancelha mais afastada do olho aparece em "nao engajado".
+  - EAR (abertura do olho): o sentido MUDA entre fontes (0,74 no dataset;
+    0,14 no EED). Sinal de que as fontes nao concordam sobre o que e
+    engajamento.
+  - Largura da boca: AUC 0,88 no EED. Nesse dataset, "engajado" e quase
+    sempre "sorrindo": o modelo estaria aprendendo sorriso, nao atencao.
+
+
+7. CUIDADOS (O QUE ESTE TESTE NAO PROVA)
+----------------------------------------------------------------------
+  - Foi UMA execucao. As diferencas de ate 3 pontos estao dentro do ruido.
+    (Isso foi tratado na etapa 2b, no item 9 abaixo.)
+  - Poucos grupos de teste (3 no protocolo A e 6 no B).
+  - As fontes definem engajamento de formas diferentes (ver item 6), o que
+    atrapalha treinar com tudo junto. (Testado na etapa 2b, item 9.)
+  - A pose da cabeca aqui e uma aproximacao 2D.
+  - A pessoa p2 (gravada por nos) ficou ABAIXO do acaso em todos os
+    modelos; vale investigar os videos dela.
+  - Nada disso foi ligado ao treino final nem a demo: as 136 coordenadas
+    continuam sendo o que a demo usa.
+
+
+8. GLOSSARIO RAPIDO
+----------------------------------------------------------------------
+Feature          : numero que descreve a imagem para o modelo.
+Acuracia balanceada: media do acerto em cada classe (acaso = 0,50).
+LOPO             : treinar sem uma pessoa e testar nela.
+Semente          : numero que fixa o sorteio de modelos como Random Forest
+                   e MLP; mudar a semente mostra se o resultado e estavel.
+AUC              : nota de 0 a 1 de quanto uma medida separa duas classes.
+Ablacao          : remover ou trocar uma parte para ver o que ela
+                   contribui.
+EAR / MAR        : razao de abertura do olho / da boca.
+
+
+9. ETAPA 2b: REPETINDO O TESTE COM MAIS CUIDADO
+----------------------------------------------------------------------
+Resultados completos: relatorio_etapa2b_robustez.txt e resultados_etapa2b.csv
+
+O QUE MUDOU EM RELACAO A ETAPA 2
+  a) VARIAS SEMENTES: Random Forest e MLP foram treinados 5 vezes, com
+     sorteios diferentes (sementes 0 a 4), e usamos a media. SVM e Regressao
+     Logistica nao sorteiam nada, entao rodam uma vez. A semente mexeu pouco
+     (desvio de 0,004 a 0,05).
+  b) COM E SEM O EED: repetimos tudo tirando o EED do treino e do teste,
+     porque nele "engajado" se parece muito com "sorrindo".
+  c) ABLACAO POR GRUPO: tiramos um grupo de medidas de cada vez (olhos,
+     boca, sobrancelha, cabeca, rosto) e olhamos quanto a nota do SVM caiu.
+     Se cai muito, o grupo importa.
+
+RESULTADO 1 - GEOMETRICO MENOS BRUTO (positivo = geometrico melhor)
+                              SVM     RegLog   MLP     RF
+  Com EED, fonte de fora    +0,080   +0,020  +0,030  -0,007
+  Com EED, LOPO             +0,069   +0,010  -0,004  -0,030
+  Sem EED, fonte de fora    -0,031   -0,024  -0,015  -0,023
+  Sem EED, LOPO             +0,054   -0,004  +0,056  +0,017
+
+  - Com o EED no treino, o SVM com medidas geometricas ganha de forma
+    consistente (8 dos 9 grupos). Nos outros modelos o efeito e pequeno.
+  - Sem o EED, o teste "fonte de fora" treina com UMA fonte so e fica no
+    acaso (0,49 a 0,61) com qualquer tipo de feature: as fontes definem
+    engajamento de jeitos diferentes. No LOPO sem EED o geometrico ainda
+    melhora, mas com so 5 grupos e muita variacao.
+
+RESULTADO 2 - O QUE IMPORTA NAS 20 MEDIDAS (queda da nota ao remover o grupo)
+                  Com EED (fonte/LOPO)   Sem EED (fonte/LOPO)
+  Sobrancelha       0,023 / 0,065          0,032 / 0,078
+  Olhos             0,073 / 0,040         -0,100 / 0,009
+  Boca              0,052 / 0,027          0,008 / -0,035
+  Cabeca            0,020 / 0,005         -0,001 / 0,007
+  Rosto             0,021 / 0,014         -0,011 / -0,021
+
+  - A SOBRANCELHA e o unico grupo que ajuda nos dois cenarios (combina com
+    o AUC do item 6).
+  - Olhos e boca so ajudam com o EED. Sem ele, tirar os olhos ate melhora a
+    nota: o EAR tem sentido invertido entre as fontes.
+  - Cabeca e rosto quase nao contribuem: as estimativas 2D de pose nao
+    mostraram valor.
+
+RESULTADO 3 - POR PESSOA
+  - Melhoram com o geometrico: D:img1 (SVM de 0,676 para 0,812) e kE.
+  - A pessoa p2 continua ABAIXO DO ACASO em todas as combinacoes (0,28 a
+    0,46) e o geometrico piora. Causa nao investigada.
+
+CONCLUSAO EM POUCAS FRASES
+  1. As medidas geometricas dao ganho modesto (+0,05 a +0,08) com o SVM,
+     principalmente quando o treino e diverso. Nao vale para todos os
+     modelos nem para todos os cenarios.
+  2. O nivel continua baixo (0,55 a 0,66): o limite e a falta de pessoas e
+     o fato de as fontes definirem engajamento de formas diferentes.
+  3. O sinal mais robusto e a distancia entre sobrancelha e olho.
+
+CUIDADOS DA ETAPA 2b
+  - Poucos grupos de teste (2 a 6) e desvio de 0,10 a 0,17 entre eles.
+    Diferencas abaixo de ~0,05 nao sao conclusivas.
+  - A pose continua sendo aproximacao 2D.
+  - Nada disso esta ligado ao treino final nem a demo.

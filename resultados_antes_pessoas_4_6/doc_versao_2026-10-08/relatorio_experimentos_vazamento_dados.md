@@ -1,0 +1,400 @@
+# Relatório de Experimentos Técnicos — Vazamento de Dados, Generalização e Correção do Classificador de Engajamento
+
+*Documento de consolidação técnica, gerado em 2026-09-19 e atualizado em 2026-10-08 (seções 7 a 13), para uso como fonte de contexto ao revisar/escrever o texto do TCC.*
+
+---
+
+## 1. Resumo do problema encontrado
+
+O projeto classifica o nível de engajamento de estudantes (4 níveis: Muito Baixo, Baixo, Alto, Muito Alto) a partir de 68 pontos faciais (landmarks) extraídos com dlib, usando três modelos de machine learning: SVM, Random Forest e MLP (rede neural).
+
+O dataset (`ER_Dataset`) foi montado a partir do dataset público do Kaggle **"Student Engagement Dataset"**. Esse dataset **não é composto de fotos independentes de pessoas diferentes** — é composto de **frames extraídos de vídeos**, salvos com numeração sequencial dentro de cada categoria (ex.: `Engaged_Confused_0020.jpg`, `Engaged_Confused_0021.jpg`, `Engaged_Confused_0022.jpg`...).
+
+Isso é relevante porque frames vizinhos na numeração são, na prática, **quase a mesma imagem**: mesma pessoa, mesma pose, mesma iluminação, com uma fração de segundo de diferença entre um frame e o outro.
+
+O processo de treinamento original (`treinar.py`) dividia o conjunto de dados em treino e teste com a função `train_test_split` do scikit-learn, escolhendo imagens **aleatoriamente, uma por uma**, sem nenhum critério que impedisse frames muito parecidos (do mesmo vídeo) de caírem um no treino e outro no teste.
+
+**Consequência:** um frame quase idêntico ao de treino aparecendo no teste faz o modelo "reconhecer" uma imagem que ele essencialmente já viu, em vez de generalizar o padrão de engajamento para uma pessoa/situação nova. Isso é chamado de **vazamento de dados (data leakage)**, e o efeito prático é **inflar artificialmente a acurácia relatada** — o modelo parece muito melhor do que realmente é para classificar engajamento em situações novas, que é o que importa na prática (ex.: a demo ao vivo do projeto, `paginas/classificar.py`, usada com uma webcam em tempo real, com pessoas que o modelo nunca viu).
+
+---
+
+## 2. Diagnóstico: evidência do vazamento
+
+Antes de corrigir qualquer coisa, foi feito um diagnóstico para confirmar a hipótese de vazamento, com duas evidências independentes:
+
+### 2.1. Teste do "quase-gêmeo" (evidência por nome de arquivo)
+
+Usando o número de sequência no nome de cada arquivo, foi verificado quantas imagens do conjunto de teste (gerado pela divisão aleatória original) tinham um "frame vizinho" (mesma categoria, número de sequência a até 2 quadros de distância) no conjunto de treino.
+
+**Resultado: 393 de 396 imagens de teste (99,2%) tinham um frame quase idêntico no treino.**
+
+Ou seja, praticamente todo o conjunto de teste tinha uma "cola" correspondente do lado do treino.
+
+### 2.2. Classificador 1-NN ingênuo (evidência por desempenho)
+
+Foi treinado um classificador **1-NN (1 vizinho mais próximo)**. Esse classificador não aprende nenhum padrão sobre engajamento: para cada imagem de teste, ele simplesmente procura, entre todas as imagens de treino, qual é a mais parecida (menor distância matemática entre os vetores de landmarks) e copia o rótulo dela.
+
+**Resultado: o 1-NN atingiu 96,21% de acurácia** na divisão de teste original (aleatória por imagem), com o seguinte desempenho por classe:
+
+| Classe | Precisão | Recall | F1-score |
+|---|---|---|---|
+| Muito Baixo | 0.94 | 0.95 | 0.95 |
+| Baixo | 0.89 | 0.88 | 0.89 |
+| Alto | 0.99 | 1.00 | 1.00 |
+| Muito Alto | 1.00 | 0.99 | 0.99 |
+
+### 2.3. O que isso prova, em termos simples
+
+Um classificador que **não aprende absolutamente nada sobre o que é engajamento** — que só "copia a resposta do colega mais parecido" — conseguiu acertar praticamente tudo. Isso só é possível se o teste não for realmente independente do treino. Portanto, os números de acurácia reportados anteriormente pelos modelos "de verdade" (SVM, Random Forest, MLP), que ficavam na faixa de 90%+, **não representavam a capacidade real desses modelos de reconhecer engajamento em pessoas/situações novas** — representavam, em boa parte, a capacidade de "decorar" frames que eram cópias quase idênticas de imagens já vistas no treino.
+
+---
+
+## 3. Correção aplicada
+
+### 3.1. O que foi mudado no código
+
+O arquivo `treinar.py` foi alterado para não dividir mais o conjunto de dados **por imagem individual**, e sim **por grupo de imagens que provavelmente pertencem ao mesmo vídeo/pessoa**.
+
+Como o dataset não possui um identificador explícito de vídeo ou de pessoa, o "grupo" de cada imagem foi inferido a partir do próprio nome do arquivo, usando a seguinte heurística:
+
+1. Extrai-se a categoria original da imagem (ex.: `Engaged_Confused`) e o número de sequência do frame (ex.: `20`).
+2. Dentro de cada categoria, os números são ordenados, e um **novo grupo é criado sempre que há um salto maior que 2** entre um número e o seguinte (por exemplo, de `0022` para `0040`). Uma sequência de frames "andando de perto" (`0020, 0021, 0022...`) é tratada como um único grupo — um provável trecho contínuo de vídeo.
+
+Com os grupos definidos, a divisão treino/teste passou a ser feita com o **`StratifiedGroupKFold`** do scikit-learn (inicialmente foi testado o `GroupShuffleSplit`, mas ele deixou uma classe inteira — "Muito Alto" — sem nenhuma amostra no teste por causa do desbalanceamento de classes; o `StratifiedGroupKFold` resolve isso ao tentar manter a proporção de cada classe similar entre treino e teste, além de respeitar os grupos).
+
+A mesma lógica de agrupamento foi usada depois no script de otimização de hiperparâmetros (`otimizar_hiperparametros.py`), para que a validação cruzada usada na busca de hiperparâmetros também não reintroduzisse vazamento.
+
+### 3.2. Por que essa correção resolve o problema
+
+Com o `StratifiedGroupKFold`, **todo o grupo (bloco de frames consecutivos) vai inteiro para o treino OU inteiro para o teste — nunca os dois**. Isso elimina a possibilidade de um frame do teste ter um "gêmeo quase idêntico" do lado do treino, porque frames vizinhos sempre pertencem ao mesmo grupo e, portanto, ficam sempre do mesmo lado da divisão. A avaliação no conjunto de teste passa a refletir a capacidade real do modelo de generalizar para situações (poses, pessoas, momentos) que ele não viu durante o treino.
+
+---
+
+## 4. Resultados após a correção
+
+### 4.1. Tabela comparativa — antes (contaminado) vs. depois (corrigido)
+
+| Modelo/Classificador | Acurácia ANTES (divisão aleatória, contaminada) | Acurácia DEPOIS (divisão por grupo, corrigida) |
+|---|---|---|
+| 1-NN (diagnóstico, não aprende nada) | 96,21% | 54,45% |
+| SVM (hiperparâmetros padrão) | ~90%+ | 52% |
+| Random Forest (hiperparâmetros padrão) | ~90%+ | 50% |
+| MLP (hiperparâmetros padrão) | ~90%+ | 56% |
+
+### 4.2. Detalhe por classe (divisão corrigida, hiperparâmetros padrão)
+
+| Classe | SVM (F1) | Random Forest (F1) | MLP (F1) |
+|---|---|---|---|
+| Muito Baixo | 0.84 | 0.79 | 0.91 |
+| Baixo | 0.31 | 0.27 | 0.45 |
+| Alto | 0.55 | 0.57 | 0.62 |
+| Muito Alto | 0.28 | 0.24 | 0.29 |
+
+### 4.3. Por que essa queda é o resultado esperado e correto — não um erro
+
+A queda de ~90%+ para a faixa de 50-56% pode parecer, à primeira vista, que "o modelo piorou" ou que "algo quebrou" na correção. **Não é isso que aconteceu.** O que mudou foi a forma de medir o desempenho, não o modelo em si:
+
+- **Antes:** a acurácia media, em grande parte, a capacidade do modelo de reconhecer frames quase idênticos aos que ele já tinha visto no treino. Essa métrica não corresponde ao uso real do sistema (a demo ao vivo, por exemplo, recebe pessoas e poses completamente novas pela webcam).
+- **Depois:** a acurácia mede a capacidade real do modelo de generalizar para situações que ele nunca viu — o que é exatamente o que se espera de um classificador de engajamento em uso prático.
+
+Adicionalmente, o **teste do 1-NN confirma que a queda é proporcional ao esperado**: como o 1-NN não aprende nada, sua acurácia deveria cair para perto do "chute aleatório" entre as classes (considerando o desbalanceamento, algo entre ~25% e ~40%) quando o vazamento é removido. Ele caiu para 54,45% — mais baixo que os ~96% anteriores, mas ainda um pouco acima do chute puro, porque os 136 números de landmarks faciais carregam algum sinal real (não vazado) sobre pose/expressão que se correlaciona com o nível de engajamento.
+
+**Do ponto de vista acadêmico, reportar o número mais baixo (correto) é mais honesto e mais defensável do que manter o número antigo:**
+- O número antigo (~90%+) não resistiria a uma banca que perguntasse "como foi feita a divisão treino/teste?" — a resposta revelaria o vazamento.
+- O número novo (~50-56%) é metodologicamente sólido e pode ser apresentado como um resultado real, com suas limitações discutidas de forma transparente (ver seção 6).
+- Identificar e corrigir esse tipo de problema **é, em si, uma contribuição metodológica válida** para o TCC — é o tipo de cuidado que diferencia um trabalho tecnicamente rigoroso de um que apenas reporta números sem investigar sua validade.
+
+---
+
+## 5. Resultado do GridSearchCV (otimização de hiperparâmetros)
+
+Depois da correção do vazamento, foi feita uma busca em grade (`GridSearchCV`) para tentar melhorar o desempenho dos três modelos, testando:
+
+- **SVM:** `C` (tolerância a erro no treino) ∈ {0.1, 1, 10, 100} × `gamma` (curvatura do kernel RBF) ∈ {"scale", 0.01, 0.1}
+- **Random Forest:** `n_estimators` (número de árvores) ∈ {100, 200, 400} × `max_depth` (profundidade máxima de cada árvore) ∈ {None, 10, 20}
+- **MLP:** `alpha` (força da regularização L2) ∈ {0.0001, 0.001, 0.01} × `hidden_layer_sizes` (tamanho das camadas ocultas) ∈ {(128,), (256, 128), (128, 64)}
+
+A validação cruzada usada dentro do `GridSearchCV` também foi feita com `StratifiedGroupKFold`, para não reintroduzir vazamento durante a própria otimização.
+
+### 5.1. Tabela de resultados
+
+| Modelo | Melhor combinação encontrada | Acurácia média na validação cruzada (dentro do treino) | Acurácia no teste — parâmetros padrão | Acurácia no teste — parâmetros otimizados |
+|---|---|---|---|---|
+| SVM | `C = 100`, `gamma = 'scale'` | 84,08% | 52% | **54,81%** |
+| Random Forest | `max_depth = 10`, `n_estimators = 400` | 78,63% | 50% | **49,55%** |
+| MLP | `alpha = 0.0001`, `hidden_layer_sizes = (128,)` | 86,10% | 56% | **56,62%** |
+
+### 5.2. Interpretação
+
+A otimização de hiperparâmetros trouxe **ganhos muito pequenos ou nulos**: SVM subiu ~3 pontos percentuais, MLP subiu menos de 1 ponto, e o Random Forest ficou praticamente igual (levemente pior, dentro da margem de ruído esperada).
+
+Um ponto chama atenção: há uma **diferença grande entre a acurácia média da validação cruzada dentro do treino (78-86%) e a acurácia no teste final (~50-57%)**. Esse "gap" indica que mesmo respeitando os grupos na validação cruzada interna, a combinação de hiperparâmetros que parecia melhor durante a busca não generaliza da mesma forma para o conjunto de teste totalmente separado. Isso é coerente com a análise das matrizes de confusão (seção 6): o fator limitante não parece ser a escolha dos hiperparâmetros, e sim a informação disponível nas features usadas.
+
+**Conclusão desta etapa:** ajustar os "botões" dos modelos não resolve o problema de fundo. O gargalo está em outro lugar — no tipo de informação extraída das imagens (ver seção 6).
+
+---
+
+## 6. Análise das matrizes de confusão — onde os modelos erram
+
+Complementando os resultados numéricos, as matrizes de confusão dos três modelos (na divisão corrigida por grupo) mostraram um padrão consistente e informativo:
+
+- **A confusão não é aleatória nem entre extremos opostos.** Nenhum dos três modelos confunde de forma relevante "Muito Baixo" com "Alto"/"Muito Alto" (ou vice-versa) — a distinção entre o grande grupo "Engajado" e o grande grupo "Não Engajado" está sendo aprendida razoavelmente bem.
+- **O erro concentra-se dentro de cada grande grupo, entre as duas subclasses que o compõem:**
+  - **Alto x Muito Alto** (dentro do grupo "Engajado"): este é o maior erro dos três modelos. No SVM, das 256 imagens verdadeiras de "Muito Alto", 153 foram previstas como "Alto" — mais do que as 44 acertadas corretamente.
+  - **Muito Baixo x Baixo** (dentro do grupo "Não Engajado"): erro menor, mas no mesmo padrão — cerca de metade das imagens de "Baixo" são confundidas com "Muito Baixo".
+
+Esse padrão faz sentido à luz de como as classes foram originalmente mapeadas a partir do dataset do Kaggle (`organizar_dataset.py`):
+- Nível 2 ("Alto") = *Confused + Frustrated* (engajado, mas de forma "negativa")
+- Nível 3 ("Muito Alto") = *Focused* (engajado de forma "positiva")
+- Nível 0 ("Muito Baixo") = *Drowsy + Looking Away*
+- Nível 1 ("Baixo") = *Bored*
+
+A diferença geométrica entre "focado" e "confuso/frustrado", ou entre "sonolento/distraído" e "entediado", é sutil (pequenas variações em sobrancelha, boca, abertura dos olhos) e aparentemente **não é bem capturada apenas pela geometria dos 68 pontos faciais normalizados** usados atualmente como características (features).
+
+**Implicação prática:** o gargalo do sistema não parece ser a escolha do algoritmo de classificação (SVM vs. Random Forest vs. MLP) nem o ajuste fino de seus hiperparâmetros — é a capacidade de representação das features extraídas. Isso aponta para features adicionais (ex.: medidas específicas de sobrancelha, textura da região dos olhos/boca, ou outras pistas visuais) como o caminho mais promissor para melhorar o desempenho, mais do que continuar ajustando os modelos existentes.
+
+---
+
+## 7. O dataset tem apenas 5 pessoas (revisão manual)
+
+Mesmo com a divisão por grupo, restava uma dúvida: os "grupos" inferidos pela numeração dos arquivos são trechos de vídeo, não pessoas. Uma revisão visual manual (`mapeamento_pessoas_kaggle.py`) mostrou que as **2.120 imagens do Kaggle mostram apenas 5 pessoas reais** (A, B, C, E, F).
+
+Consequências:
+
+- A mesma pessoa aparece em vários grupos e em categorias/níveis diferentes. Logo, a divisão por grupo (seção 3) ainda pode colocar a mesma pessoa no treino e no teste: ela remove os "frames gêmeos", mas não a mistura de pessoas.
+- **Pessoa e rótulo estão misturados.** Cada pessoa só aparece em certos níveis (A e C só nos níveis 0 e 1; F só no nível 2; E nos níveis 1, 2 e 3; B tem apenas 6 imagens). O modelo pode aprender "quem é a pessoa" em vez de "como ela está".
+- Limitação conhecida: em alguns trechos de "Drowsy", as pessoas A e B se alternam frame a frame, então o mapeamento por grupo é uma aproximação. Para precisão por imagem seria necessário clustering por reconhecimento facial (embeddings), não feito.
+
+---
+
+## 8. Teste externo com pessoas nunca vistas
+
+Para medir generalização de verdade, foi gravado um conjunto externo (`ER_Dataset_Externo/`) com **3 pessoas** (pessoa1, pessoa2, pessoa3), **1.402 imagens**, extraídas de vídeos com `extrair_frames_video.py`. O nome do arquivo guarda pessoa, sessão e classe, de modo que a separação por pessoa é exata. Nenhuma dessas pessoas aparece no `ER_Dataset`.
+
+Os modelos treinados com 80% do `ER_Dataset` (seção 3) foram avaliados nesse conjunto (`avaliar_externo.py`, relatório em `relatorio_avaliacao_externa.txt`):
+
+| Modelo | Acurácia no conjunto externo | Observação |
+|---|---|---|
+| SVM | 26% | Recall de "Muito Baixo" 83%; "Alto" e "Muito Alto" quase 0% |
+| Random Forest | 24% | Prediz "Muito Baixo" para a maior parte das imagens |
+| MLP | 23% | Recall de "Muito Baixo" 91%; demais classes quase 0% |
+
+Com 4 classes, o acaso é 25%. **Os modelos não generalizam para pessoas novas**: os 50–56% da seção 4 não se sustentam fora das 5 pessoas do treino.
+
+---
+
+## 9. Dataset unificado e baseline leave-one-person-out (LOPO)
+
+### 9.1. O que foi feito
+
+- `montar_dataset_unificado.py` juntou o Kaggle (com o ID real da pessoa no nome do arquivo) e o conjunto externo em `ER_Dataset_Unificado/` (3.522 imagens: 991 / 681 / 1.055 / 795 por nível, 8 pessoas). Nada foi movido ou apagado dos datasets originais.
+- `avaliar_loo.py` implementa a avaliação **leave-one-person-out**: para cada pessoa, treina com todas as outras e testa nela. É o protocolo que mede o que importa, acertar em alguém que o modelo nunca viu.
+- Foram avaliados SVM, Random Forest e MLP (mesmas configurações do `treinar.py`), **regressão logística** (baseline simples) e um "chute" (classe mais comum do treino). Duas tarefas: **binária** (engajado = níveis 2 e 3, não engajado = níveis 0 e 1) e **4 níveis**.
+- Cuidados: a pessoa B (6 imagens) só entra no treino; as imagens 4K do conjunto externo foram reduzidas a 1280 px no lado maior antes do dlib (aceleração, sem efeito nas features, que são normalizadas); 140 imagens sem rosto detectado foram ignoradas (3.382 imagens usadas).
+
+### 9.2. Resultado agregado (predições de todas as pessoas juntas)
+
+| Modelo | Binário: acurácia balanceada | Binário: F1 macro | 4 níveis: acurácia balanceada | 4 níveis: F1 macro |
+|---|---|---|---|---|
+| SVM | 0,485 | 0,418 | 0,327 | 0,282 |
+| Random Forest | 0,469 | 0,411 | 0,239 | 0,192 |
+| MLP | 0,445 | 0,351 | 0,278 | 0,243 |
+| Regressão logística | 0,498 | 0,449 | 0,255 | 0,226 |
+
+O acaso é 0,50 no binário e 0,25 em 4 níveis.
+
+### 9.3. Resultado por pessoa deixada de fora (binário, acurácia)
+
+| Pessoa | MLP | Random Forest | Reg. logística | SVM | Observação |
+|---|---|---|---|---|---|
+| kA | 0,818 | 0,922 | 0,853 | 0,866 | só "não engajado" (acurácia = recall dessa classe) |
+| kC | 0,632 | 0,579 | 0,666 | 0,628 | só "não engajado" |
+| kE | 0,078 | 0,127 | 0,144 | 0,062 | única do Kaggle com as duas classes |
+| kF | 0,347 | 0,588 | 0,474 | 0,705 | só "engajado" |
+| p1 | 0,559 | 0,536 | 0,542 | 0,585 | gravada pelo grupo |
+| p2 | 0,391 | 0,379 | 0,385 | 0,385 | gravada pelo grupo |
+| p3 | 0,405 | 0,372 | 0,715 | 0,434 | gravada pelo grupo |
+
+### 9.4. Interpretação
+
+- **Em pessoas novas, o desempenho está no nível do acaso** (binário ~0,45–0,50). É um resultado mais duro e mais honesto que os 50–56% da seção 4, que ainda misturavam as mesmas 5 pessoas entre treino e teste.
+- **A regressão logística simples empata com os modelos complexos.** Reforça a conclusão da seção 5: o gargalo não é o algoritmo, e sim os dados e as features.
+- Os resultados altos em kA, kC e kF são enganosos: essas pessoas têm uma única classe, então a acurácia é só o recall dessa classe, e os modelos tendem a prever "não engajado" para rostos novos. O teste mais informativo é kE (6–14%) e as três pessoas gravadas pelo grupo (37–59%, exceto a regressão logística em p3, com 71%, sem repetição que o confirme).
+- Com 4 níveis, só o SVM sai do acaso (0,33 contra 0,25).
+
+---
+
+## 10. Avaliação binária com três fontes de dados
+
+Para aumentar o número de pessoas e a diversidade do treino, foram acrescentados dois datasets ao `ER_Dataset_Unificado`, e a tarefa passou a ser **binária** (engajado x não engajado). Script: `avaliar_multi_datasets.py` (relatório `relatorio_multi_datasets.txt`, dados em `resultados_multi.csv`).
+
+### 10.1. Fontes e decisões de rotulagem
+
+| Fonte | Como foi rotulada | Não engajado | Engajado |
+|---|---|---|---|
+| `ER_Dataset_Unificado` | níveis 0 e 1 = não engajado; 2 e 3 = engajado | 1.578 | 1.804 |
+| `dataset` | Desengajado = 0; Engajado = 1; **"Parcialmente engajado" excluído** | 237 | 1.481 |
+| `dataset-2` (EED) | interested, stimulated, fulfilled, satisfied = 1; distracted = 0; **neutral, confused, overwhelmed e skeptical excluídas** | 429 | 1.891 |
+
+Total: 7.420 imagens com rosto (5.176 engajado, 2.244 não engajado). Como as classes são desbalanceadas, a métrica principal é a **acurácia balanceada** (acaso = 0,50); a acurácia simples engana (o "chute" da classe mais comum faz 0,70).
+
+Duas suposições não verificadas: (1) no `dataset`, o número em `imgN_...` identifica uma única pessoa; (2) os extremos escolhidos no EED representam engajamento. O EED não identifica pessoas e foi tratado como um único grupo.
+
+### 10.2. Resultados
+
+**Deixando um dataset inteiro de fora (treina nos outros dois):**
+
+| Modelo | Acurácia balanceada agregada |
+|---|---|
+| SVM | 0,566 |
+| Random Forest | 0,582 |
+| MLP | 0,615 |
+| Regressão logística | 0,581 |
+
+Por dataset testado: EED ≈ 0,62–0,68; `unificado` ≈ 0,54–0,64; `dataset` ≈ 0,50–0,55.
+
+**LOPO (uma pessoa de fora por vez, 21 grupos):** a maioria dos grupos do `dataset` tem só 2 a 14 imagens "não engajado". Notas como 0,99 ou 1,00 (img13, img4) são acaso estatístico, não desempenho. Entre os grupos com amostra razoável: kE 0,62–0,80; p1 0,50–0,69; **p2 0,37–0,45 (abaixo do acaso)**; p3 0,44–0,73.
+
+### 10.3. Interpretação
+
+Juntar mais pessoas e fontes ajuda um pouco (de ~0,45–0,50 no baseline da seção 9 para ~0,57–0,62), mas esses números não são diretamente comparáveis, porque o treino passou a ter muito mais pessoas. O nível continua baixo, e as diferenças entre modelos não são conclusivas.
+
+---
+
+## 11. Etapa 2: features geométricas (bruto x geométrico)
+
+### 11.1. O que foi feito
+
+Em `features.py` foram acrescentadas `features_geometricas` e `geometricas_do_vetor`, que calculam **20 medidas** a partir dos 68 pontos já normalizados (a demo e o treino principal continuam usando as 136 coordenadas):
+
+| Grupo | Medidas |
+|---|---|
+| Olhos | EAR esquerdo, direito, médio e diferença |
+| Boca | MAR interno, largura, altura, curvatura (sorriso/boca caída) |
+| Sobrancelha | distância ao olho (esquerda, direita, média), inclinação (esq., dir.), distância interna |
+| Cabeça | yaw, pitch, roll (**proxies 2D**, não `solvePnP`, que exigiria os parâmetros da câmera de cada dataset) |
+| Rosto | proporção largura/altura, distância queixo–nariz, nariz–linha dos olhos |
+
+São razões dentro do próprio rosto, portanto independem de posição e tamanho. Foram comparados três conjuntos: **bruto** (136 coordenadas), **geométrico** (20 medidas) e **bruto + geométrico** (156). Script: `avaliar_etapa2_features.py` (relatório `relatorio_etapa2_features.txt`, dados em `resultados_etapa2.csv`).
+
+### 11.2. Resultados (execução única; acurácia balanceada média, acaso = 0,50)
+
+| Protocolo | Features | MLP | Random Forest | Reg. logística | SVM |
+|---|---|---|---|---|---|
+| Dataset de fora (3 grupos) | bruto | 0,589 | 0,603 | 0,581 | 0,569 |
+| | geométrico | 0,611 | 0,598 | 0,601 | **0,649** |
+| | bruto + geométrico | 0,598 | 0,598 | 0,589 | 0,614 |
+| LOPO (6 grupos com ≥ 30 imagens de cada classe) | bruto | 0,592 | 0,595 | 0,592 | 0,592 |
+| | geométrico | 0,595 | 0,551 | 0,602 | **0,661** |
+| | bruto + geométrico | 0,590 | 0,570 | 0,599 | 0,608 |
+
+### 11.3. AUC univariado de cada medida (0,5 = sem sinal)
+
+- **Distância sobrancelha–olho:** única medida **consistente nas três fontes** (AUC 0,24–0,36): sobrancelha mais afastada do olho aparece em "não engajado".
+- **EAR (abertura do olho):** o sentido **muda entre as fontes** (0,74 no `dataset`; 0,36 no `unificado`; 0,14 no EED).
+- **Largura da boca:** AUC 0,88 no EED. Nesse dataset, "engajado" é em grande parte **sorrir**, ou seja, o rótulo mistura emoção positiva com engajamento.
+
+### 11.4. Leitura
+
+Vinte medidas interpretáveis igualam ou superam as 136 coordenadas, com ganho claro apenas no SVM (≈ +0,08). A etapa 2 foi uma única execução, o que motivou a etapa 2b.
+
+---
+
+## 12. Etapa 2b: robustez (sementes, com/sem EED, ablação)
+
+### 12.1. O que foi feito
+
+Script `avaliar_etapa2b_robustez.py` (relatório `relatorio_etapa2b_robustez.txt`, dados em `resultados_etapa2b.csv`), com três ajustes:
+
+1. **Cinco sementes** (0 a 4) para Random Forest e MLP; SVM e regressão logística não sorteiam nada e rodam uma vez. O efeito da semente foi pequeno: desvio de 0,004 a 0,05.
+2. **Com e sem o EED**, treinando e testando em cada cenário.
+3. **Ablação por grupo de features** (SVM): remove-se um grupo de cada vez e mede-se a queda.
+
+### 12.2. Geométrico menos bruto (positivo = geométrico melhor; entre parênteses, grupos em que o geométrico ganha)
+
+| Cenário | Protocolo | SVM | Reg. logística | MLP | Random Forest |
+|---|---|---|---|---|---|
+| Com EED | Fonte de fora | **+0,080** (3/3) | +0,020 (3/3) | +0,030 (2/3) | −0,007 (1/3) |
+| Com EED | LOPO (6 grupos) | **+0,069** (5/6) | +0,010 (5/6) | −0,004 (3/6) | −0,030 (3/6) |
+| Sem EED | Fonte de fora (2 grupos) | −0,031 (1/2) | −0,024 (0/2) | −0,015 (1/2) | −0,023 (0/2) |
+| Sem EED | LOPO (5 grupos) | **+0,054** (4/5) | −0,004 (3/5) | +0,056 (3/5) | +0,017 (3/5) |
+
+Níveis absolutos do SVM geométrico: 0,649 (fonte de fora) e 0,661 (LOPO) com EED; 0,514 e 0,623 sem EED.
+
+### 12.3. Ablação por grupo (queda da nota ao remover o grupo; SVM)
+
+| Grupo removido | Com EED: fonte / LOPO | Sem EED: fonte / LOPO |
+|---|---|---|
+| Sobrancelha | 0,023 / **0,065** | **0,032 / 0,078** |
+| Olhos | **0,073 / 0,040** | −0,100 / 0,009 |
+| Boca | **0,052** / 0,027 | 0,008 / −0,035 |
+| Cabeça | 0,020 / 0,005 | −0,001 / 0,007 |
+| Rosto | 0,021 / 0,014 | −0,011 / −0,021 |
+
+### 12.4. Detalhe por pessoa (geométrico x bruto)
+
+- Melhoram com o geométrico: D:img1 (SVM de 0,676 para 0,812) e kE (MLP sem EED de 0,444 para 0,702).
+- **p2 permanece abaixo do acaso em todas as combinações** (0,28–0,46), e o geométrico a piora. Erro sistemático acima do acaso sugere que o modelo aprendeu algo que, nessa pessoa, vale o contrário (hipóteses não testadas: iluminação, ângulo da câmera, estilo de expressão).
+
+### 12.5. Interpretação
+
+1. O ganho do SVM com features geométricas (+0,05 a +0,08) é **consistente quando o EED está no treino**; sem o EED, o ganho aparece no LOPO mas não no teste de fonte de fora.
+2. **Sem o EED, o teste de fonte de fora treina com uma única fonte** e fica no acaso com qualquer conjunto de features (0,49–0,61): as fontes definem engajamento de formas diferentes, e nenhuma feature resolve isso sozinha.
+3. A **sobrancelha** é o único grupo que ajuda nos dois cenários, coerente com o AUC (seção 11.3). Olhos e boca dependem do EED, em linha com o sentido invertido do EAR entre as fontes e com o efeito "sorriso" do EED. Cabeça e rosto quase não contribuem: os proxies 2D de pose não mostraram valor.
+4. Ressalvas: poucos grupos de teste (2 a 6), desvio de 0,10 a 0,17 entre grupos; diferenças abaixo de ~0,05 não são conclusivas. Os níveis absolutos continuam baixos (0,55–0,66).
+
+---
+
+## 13. Conclusões e plano a partir daqui
+
+### 13.1. Conclusões
+
+1. O vazamento de dados inflava os resultados iniciais (>90%); corrigi-lo reduziu a acurácia a 50–56%.
+2. O dataset original tem só 5 pessoas e mistura pessoa com rótulo, o que limita o que se pode aprender dele.
+3. Em pessoas nunca vistas, os modelos com as 136 coordenadas ficam no nível do acaso (~25% em 4 níveis no teste externo; ~0,50 de acurácia balanceada no binário em LOPO). Com mais fontes de dados, sobe para ~0,57–0,62.
+4. **Features geométricas dão um ganho modesto (+0,05 a +0,08) com o SVM**, sobretudo quando o treino é diverso, e deixam o modelo interpretável. O ganho não se repete em todos os modelos nem em todos os cenários, e o nível absoluto continua baixo (0,55–0,66).
+5. A distância sobrancelha–olho é o sinal mais robusto entre as fontes; olhos e boca dependem de como cada dataset define engajamento.
+6. Identificar e documentar esses problemas é, em si, uma contribuição metodológica do trabalho.
+
+### 13.2. Plano (30 dias): situação atual
+
+| Item | Situação |
+|---|---|
+| Rotulagem binária como resultado principal | Adotada (seções 10 a 12); os 4 níveis ficam como análise secundária |
+| Avaliação LOPO / fonte de fora como protocolo único | Feita (seções 9 a 12) |
+| Features geométricas e ablação | Feitas (seções 11 e 12); pose é proxy 2D e não contribuiu |
+| Investigar a pessoa p2 (abaixo do acaso) | Pendente |
+| Decidir o papel do EED (efeito sorriso) | Pendente: manter, descartar ou rotular de outro modo |
+| Gravar 5 a 10 voluntários, com todos os estados cada um | Pendente; é o maior ganho esperado |
+| Modelo final (SVM com features geométricas) e adaptação da demo (categorias e limiares) | Pendente; a demo ainda usa as 136 coordenadas |
+| Capítulo de metodologia, resultados e limitações do TCC | Pendente |
+| Opcional: features temporais por janela e boosting | Não iniciado |
+
+Critério de sucesso para as próximas etapas: elevar a acurácia balanceada em pessoas novas de forma estável (além do ruído de ~0,05) e eliminar grupos abaixo do acaso.
+
+---
+
+## Anexos — arquivos e scripts envolvidos
+
+| Arquivo | Papel |
+|---|---|
+| `treinar.py` | Script de treinamento principal; corrigido para usar `StratifiedGroupKFold` em vez de `train_test_split` aleatório |
+| `features.py` | Extração dos 68 landmarks faciais, agora normalizados (nariz na origem, escala pela distância entre os olhos), mais EAR e `analisar_rosto` |
+| `diagnostico_vazamento.py` | Script criado para o diagnóstico inicial (evidência do vazamento com divisão aleatória) |
+| `diagnostico_vazamento_corrigido.py` | Script criado para confirmar a correção (1-NN com divisão por grupo) |
+| `otimizar_hiperparametros.py` | Script criado para a busca em grade (GridSearchCV) com validação cruzada por grupo |
+| `organizar_dataset.py` | Script original que mapeia as categorias do Kaggle para os 4 níveis de engajamento (não alterado) |
+| `backup_v1_2026-09-18/`, `backup_v2_2026-09-19/` | Backups do código, modelos e dataset feitos antes de cada rodada de alterações |
+| `mapeamento_pessoas_kaggle.py` | Mapeia os grupos do Kaggle para 5 pessoas reais (revisão visual manual) |
+| `extrair_frames_video.py` | Extrai frames de vídeos para montar o conjunto externo |
+| `avaliar_externo.py` | Avalia os modelos treinados no conjunto externo (`relatorio_avaliacao_externa.txt`) |
+| `montar_dataset_unificado.py` | Junta Kaggle e externo em `ER_Dataset_Unificado/` com ID de pessoa no nome |
+| `treinar_final.py` | Treina com 100% do `ER_Dataset` e avalia no externo (script pronto, resultados ainda não gerados) |
+| `avaliar_loo.py` | Baseline leave-one-person-out (`relatorio_loo_baseline.txt`, `resultados_loo.csv`, cache `features_unificado.npz`) |
+| `teste_demo_pratico.py` | Teste da demo com webcam, comparando o modelo atual com o antigo |
+| `backup_v3` a `backup_v5_2026-10-01/` | Backups adicionais; o v5 inclui todas as alterações até o baseline LOPO |
+| `avaliar_multi_datasets.py` | Avaliação binária com as três fontes (unificado, `dataset`, EED): LOPO e fonte de fora (`relatorio_multi_datasets.txt`, `resultados_multi.csv`, cache `features_multi.npz`) |
+| `avaliar_etapa2_features.py` | Etapa 2: compara features brutas x geométricas (`relatorio_etapa2_features.txt`, `resultados_etapa2.csv`) |
+| `avaliar_etapa2b_robustez.py` | Etapa 2b: várias sementes, com/sem EED e ablação por grupo (`relatorio_etapa2b_robustez.txt`, `resultados_etapa2b.csv`) |
+| `features.py` (`features_geometricas`) | 20 medidas geométricas derivadas dos 68 pontos normalizados (ainda não usadas na demo) |
+| `backup_resultados_2026-10-08/` | Cópia dos modelos, relatórios e documentos antes das etapas 1b a 2b |
