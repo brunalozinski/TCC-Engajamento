@@ -1,0 +1,84 @@
+BASELINE LEAVE-ONE-PERSON-OUT (ER_Dataset_Unificado)
+======================================================================
+Imagens com rosto: 3382
+
+Imagens por pessoa x nivel (0..3):
+col_0    0    1    2    3
+row_0                    
+kA     214   93    0    0
+kB       6    0    0    0
+kC     401  191    0    0
+kE       0   45  314  347
+kF       0    0  369    0
+p1     108   80   79   80
+p2     126  184  184  287
+p3      71   59   63   81
+
+ATENCAO: pessoas kA, kC (so niveis 0/1) e kF (so nivel 2) tem UMA classe binaria so;
+nelas a acuracia e apenas o recall dessa classe. kB (6 imagens) so treina.
+
+######################################################################
+TAREFA: binario
+######################################################################
+
+-- Resultado agregado (predicoes de todas as pessoas juntas) --
+            modelo  acuracia  acuracia_balanceada  f1_macro
+               SVM     0.464                0.485     0.418
+     Random_Forest     0.449                0.469     0.411
+               MLP     0.420                0.445     0.351
+     Reg_Logistica     0.479                0.498     0.449
+Chute_classe_comum     0.243                0.229     0.206
+
+-- Acuracia por pessoa deixada de fora --
+modelo          Chute_classe_comum    MLP  Random_Forest  Reg_Logistica    SVM
+pessoa_testada                                                                
+kA                           0.000  0.818          0.922          0.853  0.866
+kC                           0.000  0.632          0.579          0.666  0.628
+kE                           0.064  0.078          0.127          0.144  0.062
+kF                           0.000  0.347          0.588          0.474  0.705
+p1                           0.458  0.559          0.536          0.542  0.585
+p2                           0.603  0.391          0.379          0.385  0.385
+p3                           0.526  0.405          0.372          0.715  0.434
+
+-- Media e desvio entre pessoas --
+                   acuracia        f1_macro       
+                       mean    std     mean    std
+modelo                                            
+Chute_classe_comum    0.236  0.278    0.156  0.179
+MLP                   0.461  0.236    0.308  0.126
+Random_Forest         0.501  0.246    0.345  0.134
+Reg_Logistica         0.540  0.234    0.387  0.167
+SVM                   0.524  0.260    0.349  0.154
+
+######################################################################
+TAREFA: 4_niveis
+######################################################################
+
+-- Resultado agregado (predicoes de todas as pessoas juntas) --
+            modelo  acuracia  acuracia_balanceada  f1_macro
+               SVM     0.331                0.327     0.282
+     Random_Forest     0.244                0.239     0.192
+               MLP     0.270                0.278     0.243
+     Reg_Logistica     0.256                0.255     0.226
+Chute_classe_comum     0.097                0.081     0.049
+
+-- Acuracia por pessoa deixada de fora --
+modelo          Chute_classe_comum    MLP  Random_Forest  Reg_Logistica    SVM
+pessoa_testada                                                                
+kA                           0.000  0.221          0.231          0.218  0.186
+kC                           0.000  0.688          0.537          0.503  0.681
+kE                           0.000  0.052          0.075          0.028  0.050
+kF                           0.000  0.217          0.206          0.382  0.726
+p1                           0.228  0.412          0.378          0.311  0.392
+p2                           0.236  0.154          0.140          0.155  0.197
+p3                           0.230  0.212          0.245          0.394  0.230
+
+-- Media e desvio entre pessoas --
+                   acuracia        f1_macro       
+                       mean    std     mean    std
+modelo                                            
+Chute_classe_comum    0.099  0.124    0.040  0.050
+MLP                   0.279  0.210    0.171  0.147
+Random_Forest         0.259  0.155    0.146  0.095
+Reg_Logistica         0.285  0.162    0.156  0.120
+SVM                   0.352  0.261    0.186  0.110

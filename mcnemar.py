@@ -1,25 +1,28 @@
+"""
+Teste de McNemar par a par entre os três modelos, usando os dados de teste
+salvos pelo treinar.py.
+"""
+
 import numpy as np
 import joblib
 from mlxtend.evaluate import mcnemar_table, mcnemar
 
-# Carrega os dados de teste
-X_test = np.load("C:/TCC/X_test.npy")
-y_test = np.load("C:/TCC/y_test.npy")
+from features import RAIZ
 
-# Carrega os modelos já treinados
-svm = joblib.load("C:/TCC/model_SVM.pkl")
-rf  = joblib.load("C:/TCC/model_Random_Forest.pkl")
-mlp = joblib.load("C:/TCC/model_MLP.pkl")
+X_test = np.load(RAIZ / "X_test.npy")
+y_test = np.load(RAIZ / "y_test.npy")
 
-# Gera as predições de cada modelo
+svm = joblib.load(RAIZ / "model_SVM.pkl")
+rf = joblib.load(RAIZ / "model_Random_Forest.pkl")
+mlp = joblib.load(RAIZ / "model_MLP.pkl")
+
 y_svm = svm.predict(X_test)
-y_rf  = rf.predict(X_test)
+y_rf = rf.predict(X_test)
 y_mlp = mlp.predict(X_test)
 
-# Compara cada par de modelos
 pares = [("SVM", y_svm, "Random Forest", y_rf),
-         ("SVM", y_svm, "MLP",           y_mlp),
-         ("Random Forest", y_rf, "MLP",  y_mlp)]
+         ("SVM", y_svm, "MLP", y_mlp),
+         ("Random Forest", y_rf, "MLP", y_mlp)]
 
 for nome_a, pred_a, nome_b, pred_b in pares:
     tabela = mcnemar_table(y_test, pred_a, pred_b)
