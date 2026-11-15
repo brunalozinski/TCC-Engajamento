@@ -1,0 +1,6 @@
+{
+ "corte_baixo": 0.13,
+ "corte_alto": 0.78,
+ "pureza_alvo": 0.8,
+ "base": "Validacao balanceada (790 videos)"
+}
